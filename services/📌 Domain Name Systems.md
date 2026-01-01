@@ -49,7 +49,8 @@ for NODE in 01 02 03; do
     --storage ceph-dns \
     --pool DNS-Pool
 done
-
+```
+```
 ## Common Settings
 
 ||DNS-01|DNS-02|
@@ -81,7 +82,7 @@ done
 
 
 ### Resources
-|Attrib|Value  |
+|Attrib|Value|
 |----|-------|
 |Cores|1|
 |Drive|8 GiB|

@@ -27,11 +27,11 @@ This is a tight, security-first router network design that blends zero-trust pri
 
 Subnets are subdivisions of IP networks that help isolate and route traffic efficiently. Each subnet defines a range of IP addresses and is typically grouped by function or access level. IPv4 and IPv6 CIDR notations define the address range, while restrictions govern how data flows to/from the subnet.
 
-| Description         | IPV4 CIDR        | IPV6 CIDR                | 
-|---------------------|------------------|--------------------------|
-| External Internet   | `0.0.0.0/0`      | `2a0e:1d47:da88:8f00/64` |
-| Private Network     | `10.0.0.0/16`    | `fc00:0:0/32`            | 
-| Reserved            | `192.168.0.0/24` | `fc00:1:0/32`            |
+| Description       | IPV4 CIDR        | IPV6 CIDR                |     |
+| ----------------- | ---------------- | ------------------------ | --- |
+| External Internet | `0.0.0.0/0`      | `2a0e:1d47:da88:8f00/64` |     |
+| Private Network   | `10.0.0.0/16`    | `fc00:0:0/48`            |     |
+| Reserved          | `192.168.0.0/24` | `fc00:1:0/32`            |     |
 
 #### 📦 ZONES
 
@@ -50,16 +50,16 @@ Groups of vlans that have similar functions or features. It establishes the secu
 
 #### 📦 ZONE-TO-ZONE ACCESS
 
-| From / To             | Native  | Management | Surveillance  | Servers  | Authenticated | Lab    | IoT    | Guest          
-|-----------------------|:-------:|:----------:|:-------------:|:--------:|:-------------:|:------:|:------:|:----------|
-| **Native**            | ✅      | ❌         | ❌            | ❌       | ❌            | ❌     | ❌     | ❌              
-| **Management**        | ❌      | ✅         | ✅            | ✅       | ⚠️            | ❌     | ❌     | ❌             
-| **Surveillance**      | ❌      | ❌         | ✅            | ❌       | ❌            | ❌     | ❌     | ❌              
-| **Servers**           | ❌      | ✅         | ❌            | ✅       | ✅            | ❌     | ❌     | ❌              
-| **Authenticated**     | ❌      | ⚠️         | ⚠️            | ✅       | ✅            | ⚠️     | ⚠️     | ❌              
-| **Lab**               | ❌      | ❌         | ❌            | ❌       | ❌            | ✅     | ❌     | ❌              
-| **IoT**               | ❌      | ❌         | ❌            | ⚠️       | ❌            | ❌     | ✅     | ❌              
-| **Guest**             | ❌      | ❌         | ❌            | ⚠️       | ❌            | ❌     | ❌     | ✅      
+| From / To         | Native | Management | Surveillance | Servers | Authenticated | Lab | IoT | Guest |
+| ----------------- | :----: | :--------: | :----------: | :-----: | :-----------: | :-: | :-: | :---- |
+| **Native**        |   ✅    |     ❌      |      ❌       |    ❌    |       ❌       |  ❌  |  ❌  | ❌     |
+| **Management**    |   ❌    |     ✅      |      ✅       |    ✅    |      ⚠️       |  ❌  |  ❌  | ❌     |
+| **Surveillance**  |   ❌    |     ❌      |      ✅       |    ❌    |       ❌       |  ❌  |  ❌  | ❌     |
+| **Servers**       |   ❌    |     ✅      |      ❌       |    ✅    |       ✅       |  ❌  |  ❌  | ❌     |
+| **Authenticated** |   ❌    |     ⚠️     |      ⚠️      |    ✅    |       ✅       | ⚠️  | ⚠️  | ❌     |
+| **Lab**           |   ❌    |     ❌      |      ❌       |    ❌    |       ❌       |  ✅  |  ❌  | ❌     |
+| **IoT**           |   ❌    |     ❌      |      ❌       |   ⚠️    |       ❌       |  ❌  |  ✅  | ❌     |
+| **Guest**         |   ❌    |     ❌      |      ❌       |   ⚠️    |       ❌       |  ❌  |  ❌  | ✅     |
  
 ✅ = Allowed
 ⚠️ = Limited access via specific service
@@ -70,22 +70,23 @@ Groups of vlans that have similar functions or features. It establishes the secu
 
 Virtual LANs (VLANs) logically segment your network by function, security level, and traffic flow control. Below is a defined schema with descriptive roles, CIDR ranges, gateways, restrictions, and operational notes.
 
-| Vlan  | Zone            | Purpose                                     | IPv4 CIDR       | IPv4 Gateway | IPv6 CIDR         | IPv6 Gateway      | Restrictions                          | Notes                                 |
-| ----- | --------------- | ------------------------------------------- | --------------- | ------------ | ----------------- | ----------------- | ------------------------------------- | ------------------------------------- |
-| `1`   | `Native`        | High-risk legacy VLAN                       | `10.0.1.0/24`   | `10.0.1.1`   | `fc00:0:0:1/64`   | `fc00:0:0:1::1`   | Block Inbound Traffic                 | Switch-only ports, no active services |
-| `5`   | `Management`    | Infrastructure control plane                | `10.0.5.0/24`   | `10.0.5.1`   | `fc00:0:0:5/64`   | `fc00:0:0:5::1`   | Allow Jump Host Only                  | Proxmox, iDRAC, switches; block WAN   |
-| `6`   | `NMS`           | NMS Core (LibreNMS, syslog, SNMP collector) | `10.0.6.0/24`   | `10.0.6.1 `  | `fc00:0:0:6/64`   | `fc00:0:0:6::1`   | Block RFC1918, Bandwidth Limits       | Client isolation enforced             |
-| `10`  | `Surveillance`  | Surveillance subnet                         | `10.0.20.0/24`  | `10.0.20.1`  | `fc00:0:0:20/64`  | `fc00:0:0:20::1`  | No Internet + One-Way NVR Access Only | Block egress, permit RTSP/ONVIF       |
-| `11`  | `Cameras`       | Cameras                                     | `10.0.11.0/24`  | `10.0.11.1`  | `fc00:0:0:11/64`  | `fc00:0:0:11::1`  | No Internet + One-Way NVR Access Only | Block egress, permit RTSP/ONVIF       |
-| `50`  | `Servers`       | Core internal services                      | `10.0.50.0/24`  | `10.0.50.1`  | `fc00:0:0:50/64`  | `fc00:0:0:50::1`  | Block DMZ/Guest Ingress               | No public services, DBs only          |
-| `52`  | `Streaming`     | QoS-prioritized media devices               | `10.0.52.0/24`  | `10.0.52.1`  | `fc00:0:0:52/64`  | `fc00:0:0:52::1`  | Enable LLDP/MDNS to Servers           | Rate limit                            |
-| `100` | `Authenticated` | Trusted Users                               | `10.0.100.0/24` | `10.0.100.1` | `fc00:0:0:100/64` | `fc00:0:0:100::1` | 802.1X/RADIUS Only                    | Limited server access                 |
-| `150` | `Lab`           | Security quarantine zone                    | `10.0.150.0/24` | `10.0.150.1` | `fc00:0:0:150/64` | `fc00:0:0:150::1` | Block Production Access               | Log everything, no IPv6 RA            |
-| `200` | `IoT`           | Untrusted smart devices                     | `10.0.200.0/24` | `10.0.200.1` | `fc00:0:0:200/64` | `fc00:0:0:200::1` | Block Inter-Vlan Traffic              | L2 Port security, storm control       |
-| `201` | `VOIP`          | VOIP Devices                                | `10.0.201.0/24` | `10.0.201.1` | `fc00:0:0:201/64` | `fc00:0:0:201::1` | Block RFC1918, Bandwidth Limits       | Client isolation enforced             |
-| `250` | `Guest`         | Internet-only guest VLAN                    | `10.0.250.0/24` | `10.0.250.1` | `fc00:0:0:250/64` | `fc00:0:0:250::1` | Block RFC1918, Bandwidth Limits       | Client isolation enforced             |
-| `251` | `DMZ`           | Public-facing via reverse proxy             | `10.0.250.0/24` | `10.0.250.1` | `fc00:0:0:250/64` | `fc00:0:0:250::1` | Reverse Proxy Only                    | No SSH from non-mgmt, DB isolations   |
-| `252` | `Honeypot`      | Honeypot/Deception/Uninvitied               | `10.0.251.0/24` | `10.0.251.1` | `fc00:0:0:251/64` | `fc00:0:0:251::1` | Enable LLDP/MDNS to Servers           | Rate limit                            |
+| Vlan  | Zone            | Purpose                                     | IPv4 CIDR       | IPv4 Gateway | IPv6 CIDR                | IPv6 Gateway             | Restrictions                          | Notes                                      |
+| ----- | --------------- | ------------------------------------------- | --------------- | ------------ | ------------------------ | ------------------------ | ------------------------------------- | ------------------------------------------ |
+| `1`   | `Native`        | High-risk legacy VLAN                       | `10.0.1.0/24`   | `10.0.1.1`   | `fc00:0:0:1/64`          | `fc00:0:0:1::1`          | Block Inbound Traffic                 | Switch-only ports, no active services      |
+| `5`   | `Management`    | Infrastructure control plane                | `10.0.5.0/24`   | `10.0.5.1`   | `fc00:0:0:5/64`          | `fc00:0:0:5::1`          | Allow Jump Host Only                  | Proxmox, iDRAC, switches; block WAN        |
+| `6`   | `NMS`           | NMS Core (LibreNMS, syslog, SNMP collector) | `10.0.6.0/24`   | `10.0.6.1 `  | `fc00:0:0:6/64`          | `fc00:0:0:6::1`          | Block RFC1918, Bandwidth Limits       | Client isolation enforced                  |
+| `10`  | `Surveillance`  | Surveillance subnet                         | `10.0.20.0/24`  | `10.0.20.1`  | `fc00:0:0:20/64`         | `fc00:0:0:20::1`         | No Internet + One-Way NVR Access Only | Block egress, permit RTSP/ONVIF            |
+| `11`  | `Cameras`       | Cameras                                     | `10.0.11.0/24`  | `10.0.11.1`  | `fc00:0:0:11/64`         | `fc00:0:0:11::1`         | No Internet + One-Way NVR Access Only | Block egress, permit RTSP/ONVIF            |
+| `50`  | `Servers`       | Core internal services                      | `10.0.50.0/24`  | `10.0.50.1`  | `fc00:0:0:50/64`         | `fc00:0:0:50::1`         | Block DMZ/Guest Ingress               | No public services, DBs only               |
+| `51`  | `Streaming`     | QoS-prioritized media devices               | `10.0.52.0/24`  | `10.0.52.1`  | `fc00:0:0:52/64`         | `fc00:0:0:52::1`         | Enable LLDP/MDNS to Servers           | Rate limit                                 |
+| `100` | `Authenticated` | Trusted Users                               | `10.0.100.0/24` | `10.0.100.1` | `fc00:0:0:100/64`        | `fc00:0:0:100::1`        | 802.1X/RADIUS Only                    | Limited server access                      |
+| `150` | `Lab`           | Security quarantine zone                    | `10.0.150.0/24` | `10.0.150.1` | `fc00:0:0:150/64`        | `fc00:0:0:150::1`        | Block Production Access               | Log everything, no IPv6 RA                 |
+| `200` | `IoT`           | Untrusted smart devices                     | `10.0.200.0/24` | `10.0.200.1` | `fc00:0:0:200/64`        | `fc00:0:0:200::1`        | Block Inter-Vlan Traffic              | L2 Port security, storm control            |
+| `201` | `VoIP`          | VOIP Devices                                | `10.0.201.0/24` | `10.0.201.1` | `fc00:0:0:201/64`        | `fc00:0:0:201::1`        | Block RFC1918, Bandwidth Limits       | Client isolation enforced                  |
+| `250` | `Guest`         | Internet-only guest VLAN                    | `10.0.250.0/24` | `10.0.250.1` | `fc00:0:0:250/64`        | `fc00:0:0:250::1`        | Block RFC1918, Bandwidth Limits       | Client isolation enforced                  |
+| `251` | `DMZ`           | Public-facing via reverse proxy             | `10.0.250.0/24` | `10.0.250.1` | `fc00:0:0:250/64`        | `fc00:0:0:250::1`        | Reverse Proxy Only                    | No SSH from non-mgmt, DB isolations        |
+| `252` | `Honeypot`      | Honeypot/Deception/Uninvitied               | `10.0.251.0/24` | `10.0.251.1` | `fc00:0:0:251/64`        | `fc00:0:0:251::1`        | Enable LLDP/MDNS to Servers           | Rate limit                                 |
+| `999` | `WAN`           | Internet Transit / ISP Hand off             | `DHCP`          | `N/A`        | `2a0e:1d47:da88:8f00/64` | `2a0e:1d47:da88:8f00::1` | Drop RFC1918, Rate Limit ICMP         | Physical isolation from internal networks. |
 
 
 ## 🧠 Services
