@@ -1,0 +1,3 @@
+proxmox_api_url          = "https://pve.example.invalid:8006/api2/json"
+proxmox_api_token_id     = "user@realm!tokenname"
+proxmox_api_token_secret = "REPLACE_ME"
