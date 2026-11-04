@@ -147,7 +147,7 @@ class FakeCore(unittest.TestCase):
         self.assert_conventions(p)
         lines = p.stdout.splitlines()
         self.assertTrue(lines[0].startswith("ok"), lines[0])
-        self.assertIn("homelab:", lines[0])
+        self.assertNotIn("homelab:", lines[0])
         names = " ".join(lines)
         for want in ("proxmox quorum", "proxmox pve-01", "k8s talos-01", "flux ks apps",
                      "flux hr kube-system/cilium", "ceph health", "ceph usage",
@@ -162,6 +162,9 @@ class FakeCore(unittest.TestCase):
         data = self.assert_conventions(p, is_json=True)
         self.assertEqual(set(data), {"summary", "state", "checks"})
         self.assertEqual(data["state"], "ok")
+        # the core adds the state and the centre (record 0019 s3): the summary must not repeat them
+        self.assertFalse(data["summary"].startswith("homelab"), data["summary"])
+        self.assertFalse(data["summary"].split()[0] in STATES, data["summary"])
         self.assertTrue(data["checks"])
         for c in data["checks"]:
             self.assertLessEqual(set(c), {"name", "state", "detail", "since"})
@@ -183,6 +186,7 @@ class FakeCore(unittest.TestCase):
         self.assertEqual(p.returncode, 1)
         data = json.loads(p.stdout)
         self.assertEqual(data["state"], "warn")
+        self.assertFalse(data["summary"].startswith("homelab"), data["summary"])
         ceph = next(c for c in data["checks"] if c["name"] == "ceph health")
         self.assertEqual(ceph["state"], "warn")
         self.assertIn("OSD_DOWN", ceph["detail"])
@@ -302,7 +306,9 @@ class FakeCore(unittest.TestCase):
         p = self.run_module("backlog")
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assert_conventions(p)
-        self.assertIn("1 open issues, 1 open PRs across 8 repos", p.stdout.splitlines()[0])
+        first = p.stdout.splitlines()[0]
+        self.assertIn("1 open issues, 1 open PRs across 8 repos", first)
+        self.assertFalse(first.startswith("homelab"), first)
         self.assertIn("andronics/homelab-k8s", p.stdout)
         data = self.assert_conventions(self.run_module("backlog", json_flag=True), is_json=True)
         self.assertEqual(len(data["repos"]), 8)

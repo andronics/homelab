@@ -495,10 +495,10 @@ def do_status(args, want_json):
         "fail" if counts["fail"] else "warn" if counts["warn"] else "unknown" if counts["unknown"] else "ok"
     )
     if state == "ok":
-        summary = f"homelab: all {len(checks)} checks ok"
+        summary = f"all {len(checks)} checks ok"
     else:
         bad = ", ".join(f"{counts[s]} {s}" for s in ("fail", "warn", "unknown") if counts[s])
-        summary = f"homelab: {bad} of {len(checks)} checks"
+        summary = f"{bad} of {len(checks)} checks"
     if want_json:
         emit_json({"summary": summary, "state": state, "checks": checks})
     else:
@@ -653,7 +653,7 @@ def do_backlog(args, want_json):
     rows.sort(key=lambda x: (x["repo"], x["number"] or 0))
     issues = sum(1 for r in rows if r["kind"] == "issue")
     prs = len(rows) - issues
-    summary = f"homelab: {issues} open issues, {prs} open PRs across {len(REPOS)} repos"
+    summary = f"{issues} open issues, {prs} open PRs across {len(REPOS)} repos"
     if want_json:
         emit_json({"summary": summary, "repos": [f"{GH_OWNER}/{r}" for r in REPOS], "items": rows})
         return EXIT_OK
