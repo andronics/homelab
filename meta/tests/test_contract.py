@@ -206,6 +206,30 @@ class FakeCore(unittest.TestCase):
         self.assertEqual(checks["backup media/backup-music"]["state"], "fail")
         self.assertEqual(json.loads(p.stdout)["state"], "fail")
 
+    def test_status_suspended_backup_is_ok(self):
+        def change(o):
+            for i in o["items"]:
+                if i["kind"] != "CronJob":
+                    continue
+                if i["metadata"]["name"] == "backup-music":
+                    i["spec"]["suspend"] = True
+                    i["status"]["lastSuccessfulTime"] = "2026-10-01T00:00:00Z"
+                if i["metadata"]["name"] == "backup-tracker":
+                    i["spec"]["suspend"] = True
+                    i["status"].pop("lastSuccessfulTime", None)
+                if i["metadata"]["name"] == "backup-photos":
+                    i["status"]["lastSuccessfulTime"] = "2026-11-03T00:00:00Z"
+            return o
+        p = self.run_module("status", json_flag=True, env={"FAKE_FIXTURES": self.fixtures_with("backups", change)})
+        checks = {c["name"]: c for c in json.loads(p.stdout)["checks"]}
+        music = checks["backup media/backup-music"]
+        self.assertEqual(music["state"], "ok")
+        self.assertTrue(music["detail"].startswith("suspended; last success "), music["detail"])
+        self.assertEqual(checks["backup tools/backup-tracker"]["state"], "ok")
+        self.assertEqual(checks["backup tools/backup-tracker"]["detail"], "suspended; never ran")
+        # an unsuspended stale job still warns
+        self.assertEqual(checks["backup media/backup-photos"]["state"], "warn")
+
     def test_status_node_not_ready(self):
         def down(o):
             for c in o["items"][0]["status"]["conditions"]:
