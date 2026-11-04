@@ -453,7 +453,11 @@ def backup_checks(doc, ref):
         last = r["last_success"]
         when = f"last success {age(last, ref)}" + (f" ({stamp(last)})" if last else "")
         secs = (ref - last).total_seconds() if last else None
-        if r["newest_failed"]:
+        if r["suspended"]:
+            # Suspended on purpose: not a problem however old the last success is.
+            state = "ok"
+            detail = "suspended; " + (when if last else "never ran")
+        elif r["newest_failed"]:
             state, detail = "fail", f"newest run failed; {when}"
         elif last is None or secs > BACKUP_FAIL_S:
             state, detail = "fail", when
@@ -461,9 +465,6 @@ def backup_checks(doc, ref):
             state, detail = "warn", when
         else:
             state, detail = "ok", when
-        if r["suspended"]:
-            state = "fail" if state == "fail" else "warn"
-            detail = "suspended; " + detail
         out.append(check(f"backup {r['namespace']}/{r['name']}", state, detail, last))
     if not out:
         out.append(check("backups", "fail", "no backup CronJobs"))
