@@ -1,0 +1,120 @@
+{
+ "items": [
+  {
+   "kind": "Deployment",
+   "metadata": {
+    "name": "photos",
+    "namespace": "media"
+   },
+   "spec": {
+    "replicas": 1,
+    "template": {
+     "spec": {
+      "containers": [
+       {
+        "image": "registry.example.org/photos:v3.3.5",
+        "name": "photos"
+       }
+      ]
+     }
+    }
+   },
+   "status": {
+    "readyReplicas": 1
+   }
+  },
+  {
+   "kind": "Deployment",
+   "metadata": {
+    "name": "photos-db",
+    "namespace": "media"
+   },
+   "spec": {
+    "replicas": 1,
+    "template": {
+     "spec": {
+      "containers": [
+       {
+        "image": "registry.example.org/photos-db:14-vectorchord0.4.3-pgvectors0.2.0",
+        "name": "photos-db"
+       }
+      ]
+     }
+    }
+   },
+   "status": {
+    "readyReplicas": 1
+   }
+  },
+  {
+   "kind": "Deployment",
+   "metadata": {
+    "name": "music",
+    "namespace": "media"
+   },
+   "spec": {
+    "replicas": 1,
+    "template": {
+     "spec": {
+      "containers": [
+       {
+        "image": "registry.example.org/music:0.64.2",
+        "name": "music"
+       }
+      ]
+     }
+    }
+   },
+   "status": {
+    "readyReplicas": 1
+   }
+  },
+  {
+   "kind": "Deployment",
+   "metadata": {
+    "name": "tracker",
+    "namespace": "tools"
+   },
+   "spec": {
+    "replicas": 1,
+    "template": {
+     "spec": {
+      "containers": [
+       {
+        "image": "registry.example.org/tracker:0.2.2",
+        "name": "tracker"
+       }
+      ]
+     }
+    }
+   },
+   "status": {
+    "readyReplicas": 1
+   }
+  },
+  {
+   "kind": "Deployment",
+   "metadata": {
+    "name": "whoami",
+    "namespace": "web"
+   },
+   "spec": {
+    "replicas": 2,
+    "template": {
+     "spec": {
+      "containers": [
+       {
+        "image": "registry.example.org/whoami:v1.11",
+        "name": "whoami"
+       }
+      ]
+     }
+    }
+   },
+   "status": {
+    "readyReplicas": 2
+   }
+  }
+ ],
+ "kind": "List"
+}

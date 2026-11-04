@@ -1,0 +1,163 @@
+{
+ "items": [
+  {
+   "kind": "Kustomization",
+   "metadata": {
+    "name": "apps",
+    "namespace": "flux-system"
+   },
+   "spec": {
+    "suspend": false
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-11-04T04:00:19Z",
+      "message": "Applied revision: main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3",
+      "reason": "ReconciliationSucceeded",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "lastAppliedRevision": "main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3",
+    "lastAttemptedRevision": "main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3"
+   }
+  },
+  {
+   "kind": "Kustomization",
+   "metadata": {
+    "name": "flux-system",
+    "namespace": "flux-system"
+   },
+   "spec": {
+    "suspend": false
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-11-04T03:59:30Z",
+      "message": "Applied revision: main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3",
+      "reason": "ReconciliationSucceeded",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "lastAppliedRevision": "main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3",
+    "lastAttemptedRevision": "main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3"
+   }
+  },
+  {
+   "kind": "Kustomization",
+   "metadata": {
+    "name": "infra-configs",
+    "namespace": "flux-system"
+   },
+   "spec": {
+    "suspend": false
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-11-04T04:00:12Z",
+      "message": "Applied revision: main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3",
+      "reason": "ReconciliationSucceeded",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "lastAppliedRevision": "main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3",
+    "lastAttemptedRevision": "main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3"
+   }
+  },
+  {
+   "kind": "Kustomization",
+   "metadata": {
+    "name": "infra-controllers",
+    "namespace": "flux-system"
+   },
+   "spec": {
+    "suspend": false
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-11-04T04:00:03Z",
+      "message": "Applied revision: main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3",
+      "reason": "ReconciliationSucceeded",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "lastAppliedRevision": "main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3",
+    "lastAttemptedRevision": "main@sha1:e1ab509f8f6dc62de1286bcf73b7f9397e70a0b3"
+   }
+  },
+  {
+   "kind": "HelmRelease",
+   "metadata": {
+    "name": "cert-manager",
+    "namespace": "cert-manager"
+   },
+   "spec": {
+    "suspend": false
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-10-19T15:32:04Z",
+      "message": "Helm install succeeded for release cert-manager/cert-manager.v1 with chart cert-manager@v1.21.2",
+      "reason": "InstallSucceeded",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "lastAttemptedRevision": "v1.21.2"
+   }
+  },
+  {
+   "kind": "HelmRelease",
+   "metadata": {
+    "name": "cilium",
+    "namespace": "kube-system"
+   },
+   "spec": {
+    "suspend": false
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-10-19T15:31:43Z",
+      "message": "Helm upgrade succeeded for release kube-system/cilium.v2 with chart cilium@1.20.3",
+      "reason": "UpgradeSucceeded",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "lastAttemptedRevision": "1.20.3"
+   }
+  },
+  {
+   "kind": "HelmRelease",
+   "metadata": {
+    "name": "traefik",
+    "namespace": "traefik"
+   },
+   "spec": {
+    "suspend": false
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-10-19T15:32:02Z",
+      "message": "Helm install succeeded for release traefik/traefik.v1 with chart traefik@42.0.0",
+      "reason": "InstallSucceeded",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "lastAttemptedRevision": "42.0.0"
+   }
+  }
+ ],
+ "kind": "List"
+}

@@ -1,0 +1,770 @@
+#!/usr/bin/env python3
+"""meta homelab: the homelab centre's module for the `meta` front door (brain record 0019).
+
+One executable that describes itself (`--meta-manifest`) and answers four read-only verbs:
+
+  status            Proxmox quorum and nodes, Kubernetes (Talos) nodes, Flux Kustomizations
+                    and HelmReleases, Ceph health and usage, the newest backup per job
+  list <what>       services | nodes | backups, one name per line, sorted
+  show <service>    one service in detail, `key: value` lines (exit 5 if there is none)
+  backlog           open issues and pull requests across the eight homelab repos
+
+"Services" are the Deployments the Flux Kustomization `apps` manages (label
+kustomize.toolkit.fluxcd.io/name=apps), in every namespace.
+
+Everything here reads. Python 3 standard library only. Sources, all read-only:
+  kubectl get nodes | Flux Kustomizations and HelmReleases | CronJobs and Jobs labelled
+  app.kubernetes.io/component=backup | Deployments of `apps` | Traefik IngressRoutes
+  ssh pve-01 pvesh get /cluster/status | ssh pve-01 ceph status
+  gh api graphql (issue and pull-request numbers and titles)
+
+Environment from the core: META_JSON=1 (or --json), META_TIMEOUT (seconds left; each source
+call stops before it). Exit codes are record 0019 §3's: 0 ok, 1 a problem found, 2 usage,
+4 a live source unreachable, 5 not found, 6 this module broke.
+"""
+
+import concurrent.futures
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+
+CENTRE = "homelab"
+OWNER = "homelab-coordinator"
+PROG = "meta homelab"
+WIDTH = 100
+
+EXIT_OK, EXIT_PROBLEM, EXIT_USAGE, EXIT_REFUSED, EXIT_UNREACHABLE, EXIT_NOT_FOUND, EXIT_BROKEN = range(7)
+
+REPOS = [
+    "homelab",
+    "homelab-k8s",
+    "homelab-etc",
+    "homelab-talos",
+    "homelab-portal",
+    "homelab-docker-compose",
+    "homelab-docker-images",
+    "homelab-docker-mods",
+]
+GH_OWNER = "andronics"
+PVE_HOST = "pve-01"
+APPS_KUSTOMIZATION = "apps"
+BACKUP_LABEL = "app.kubernetes.io/component=backup"
+
+# Backup ages: the jobs run nightly.
+BACKUP_WARN_S = 26 * 3600
+BACKUP_FAIL_S = 50 * 3600
+# Ceph raw usage.
+CEPH_WARN_PCT = 75.0
+CEPH_FAIL_PCT = 85.0
+
+MANIFEST = {
+    "meta": 1,
+    "centre": CENTRE,
+    "owner": OWNER,
+    "summary": "Proxmox nodes, the Talos cluster, Flux, Ceph and backups",
+    "verbs": {
+        "status": {"summary": "Proxmox, Kubernetes nodes, Flux, Ceph, backups", "cache": 60},
+        "list": {
+            "summary": "services | nodes | backups",
+            "args": ["what"],
+            "complete": ["services", "nodes", "backups"],
+            "cache": 300,
+        },
+        "show": {
+            "summary": "one service in detail",
+            "args": ["service"],
+            "complete": "list services",
+            "cache": 60,
+        },
+        "backlog": {"summary": "open issues and PRs across the homelab repos", "cache": 600},
+    },
+    "results": [1, 5],
+}
+
+HELP = {
+    "status": """usage: meta homelab status [--json]
+
+Is the homelab as it should be? One line per check, a summary line first:
+  proxmox quorum, proxmox <node>   pvesh get /cluster/status on pve-01
+  k8s <node>                       Ready, pressure and cordon state (kubectl get nodes)
+  flux ks <name>, flux hr <ns>/<name>   Flux Kustomizations and HelmReleases
+  ceph health, ceph usage          ceph status on pve-01 (usage warns at 75%, fails at 85%)
+  backup <ns>/<job>                the newest backup per job (warns after 26h, fails after 50h
+                                   or when the newest run failed)
+Exit 0 all ok, 1 a warn or fail found, 4 a source unreachable.""",
+    "list": """usage: meta homelab list services|nodes|backups [--json]
+
+services   the Deployments the Flux Kustomization `apps` manages
+nodes      Proxmox nodes and Kubernetes nodes
+backups    the backup CronJobs (label app.kubernetes.io/component=backup)
+One name per line, sorted.""",
+    "show": """usage: meta homelab show <service> [--json]
+
+One service (a Deployment of the `apps` Kustomization, by name or namespace/name):
+namespace, ready replicas, image tags, the Kustomization's state, its ingress host and its
+last backup. Exit 5 if there is no such service.""",
+    "backlog": """usage: meta homelab backlog [--json]
+
+Open issues and pull requests across the eight homelab repos: repo, number, kind, title.""",
+}
+
+
+class Usage(Exception):
+    pass
+
+
+class NotFound(Exception):
+    pass
+
+
+class Unreachable(Exception):
+    pass
+
+
+# ---------------------------------------------------------------- time
+
+
+def now():
+    fixed = os.environ.get("META_HOMELAB_NOW")
+    if fixed:
+        return parse_time(fixed)
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def parse_time(s):
+    if not s:
+        return None
+    try:
+        t = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=dt.timezone.utc)
+    return t
+
+
+def iso(t):
+    return t.astimezone().isoformat(timespec="seconds") if t else None
+
+
+def stamp(t):
+    return t.astimezone().strftime("%Y-%m-%d %H:%M") if t else "never"
+
+
+def age(t, ref):
+    if t is None:
+        return "never"
+    s = max(0, int((ref - t).total_seconds()))
+    if s < 60:
+        return f"{s}s ago"
+    if s < 3600:
+        return f"{s // 60}m ago"
+    if s < 86400:
+        return f"{s // 3600}h ago"
+    return f"{s // 86400}d ago"
+
+
+def human_bytes(n):
+    n = float(n)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB", "PiB"):
+        if n < 1024 or unit == "PiB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{int(n)} B"
+        n /= 1024
+    return f"{n:.1f} PiB"
+
+
+# ---------------------------------------------------------------- sources
+
+
+def call_timeout():
+    try:
+        left = float(os.environ.get("META_TIMEOUT", "18"))
+    except ValueError:
+        left = 18.0
+    return max(0.5, min(15.0, left - 1.0))
+
+
+def kubectl(*args):
+    t = call_timeout()
+    return ["kubectl", f"--request-timeout={max(1, int(t))}s", "get", *args, "-o", "json"]
+
+
+def pve(command):
+    return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", PVE_HOST, command]
+
+
+def backlog_query():
+    parts = []
+    for i, name in enumerate(REPOS):
+        parts.append(
+            f'r{i}: repository(owner: "{GH_OWNER}", name: "{name}") {{ nameWithOwner '
+            "issues(states: OPEN, first: 100) { nodes { number title } } "
+            "pullRequests(states: OPEN, first: 100) { nodes { number title } } }"
+        )
+    return "query { " + " ".join(parts) + " }"
+
+
+SOURCES = {
+    "nodes": lambda: kubectl("nodes"),
+    "flux": lambda: kubectl(
+        "kustomizations.kustomize.toolkit.fluxcd.io,helmreleases.helm.toolkit.fluxcd.io", "-A"
+    ),
+    "backups": lambda: kubectl("cronjobs,jobs", "-A", "-l", BACKUP_LABEL),
+    "workloads": lambda: kubectl(
+        "deployments", "-A", "-l", f"kustomize.toolkit.fluxcd.io/name={APPS_KUSTOMIZATION}"
+    ),
+    "routes": lambda: kubectl("ingressroutes.traefik.io", "-A"),
+    "proxmox": lambda: pve("pvesh get /cluster/status --output-format json"),
+    "ceph": lambda: pve("ceph status --format json"),
+    "backlog": lambda: ["gh", "api", "graphql", "-f", "query=" + backlog_query()],
+}
+
+
+def fetch(name):
+    """Run one read-only source and return its parsed JSON, or raise Unreachable."""
+    argv = SOURCES[name]()
+    try:
+        p = subprocess.run(
+            argv,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=call_timeout(),
+        )
+    except FileNotFoundError:
+        raise Unreachable(f"{name}: {argv[0]} not found")
+    except subprocess.TimeoutExpired:
+        raise Unreachable(f"{name}: no answer within {call_timeout():.0f}s")
+    if p.returncode != 0:
+        first = (p.stderr.strip().splitlines() or ["no output"])[0]
+        raise Unreachable(f"{name}: {argv[0]} exited {p.returncode}: {first[:120]}")
+    try:
+        return json.loads(p.stdout)
+    except ValueError:
+        raise Unreachable(f"{name}: {argv[0]} did not return JSON")
+
+
+def fetch_all(names):
+    """Fetch sources in parallel. Returns ({name: data}, {name: error})."""
+    data, errors = {}, {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(names)) as pool:
+        futures = {pool.submit(fetch, n): n for n in names}
+        for f in concurrent.futures.as_completed(futures):
+            n = futures[f]
+            try:
+                data[n] = f.result()
+            except Unreachable as e:
+                errors[n] = str(e)
+    return data, errors
+
+
+def require(names):
+    data, errors = fetch_all(names)
+    if errors:
+        raise Unreachable("; ".join(errors[n] for n in names if n in errors))
+    return data
+
+
+# ---------------------------------------------------------------- helpers
+
+
+def condition(obj, ctype):
+    for c in obj.get("status", {}).get("conditions", []) or []:
+        if c.get("type") == ctype:
+            return c
+    return None
+
+
+def items(doc, kind=None):
+    out = doc.get("items", []) if isinstance(doc, dict) else []
+    return [i for i in out if kind is None or i.get("kind") == kind]
+
+
+def meta_of(obj):
+    m = obj.get("metadata", {})
+    return m.get("namespace", ""), m.get("name", "")
+
+
+def image_tag(image):
+    image = image.split("@", 1)[0]
+    last = image.rsplit("/", 1)[-1]
+    return last.split(":", 1)[1] if ":" in last else "latest"
+
+
+def route_hosts(route):
+    hosts = []
+    for r in route.get("spec", {}).get("routes", []) or []:
+        hosts += re.findall(r"Host\(`([^`]+)`\)", r.get("match", ""))
+    return hosts
+
+
+def check(name, state, detail, since=None):
+    c = {"name": name, "state": state, "detail": detail}
+    if since:
+        c["since"] = iso(since)
+    return c
+
+
+# ---------------------------------------------------------------- status
+
+
+def proxmox_checks(doc):
+    out = []
+    if not isinstance(doc, list):
+        return [check("proxmox quorum", "unknown", "unexpected answer from pvesh")]
+    cluster = next((x for x in doc if x.get("type") == "cluster"), None)
+    nodes = sorted((x for x in doc if x.get("type") == "node"), key=lambda x: x.get("name", ""))
+    online = sum(1 for n in nodes if n.get("online") == 1)
+    if cluster is None:
+        out.append(check("proxmox quorum", "unknown", "no cluster entry"))
+    elif cluster.get("quorate") == 1:
+        out.append(check("proxmox quorum", "ok", f"quorate, {online}/{len(nodes)} nodes online"))
+    else:
+        out.append(check("proxmox quorum", "fail", f"not quorate, {online}/{len(nodes)} online"))
+    for n in nodes:
+        up = n.get("online") == 1
+        out.append(check(f"proxmox {n.get('name')}", "ok" if up else "fail", "online" if up else "offline"))
+    return out
+
+
+def node_checks(doc):
+    out = []
+    for n in sorted(items(doc), key=lambda x: meta_of(x)[1]):
+        name = meta_of(n)[1]
+        info = n.get("status", {}).get("nodeInfo", {})
+        ready = condition(n, "Ready")
+        since = parse_time(ready.get("lastTransitionTime")) if ready else None
+        version = f"{info.get('osImage', '?')}, kubelet {info.get('kubeletVersion', '?')}"
+        pressures = [
+            t for t in ("MemoryPressure", "DiskPressure", "PIDPressure")
+            if (condition(n, t) or {}).get("status") == "True"
+        ]
+        if not ready or ready.get("status") != "True":
+            reason = (ready or {}).get("reason") or "no Ready condition"
+            out.append(check(f"k8s {name}", "fail", f"not Ready ({reason}), {version}", since))
+        elif pressures:
+            out.append(check(f"k8s {name}", "warn", f"Ready, {', '.join(pressures)}, {version}", since))
+        elif n.get("spec", {}).get("unschedulable"):
+            out.append(check(f"k8s {name}", "warn", f"Ready, cordoned, {version}", since))
+        else:
+            out.append(check(f"k8s {name}", "ok", f"Ready, {version}", since))
+    if not out:
+        out.append(check("k8s nodes", "fail", "no nodes"))
+    return out
+
+
+def flux_state(obj):
+    if obj.get("spec", {}).get("suspend"):
+        return "warn", "suspended", None
+    ready = condition(obj, "Ready")
+    since = parse_time(ready.get("lastTransitionTime")) if ready else None
+    status = obj.get("status", {})
+    rev = status.get("lastAppliedRevision") or status.get("lastAttemptedRevision") or ""
+    rev = re.sub(r"(sha1|sha256):([0-9a-f]{8})[0-9a-f]+", r"\1:\2", rev)
+    if not ready:
+        return "warn", "no Ready condition yet", since
+    if ready.get("status") == "True":
+        return "ok", f"ready {rev}".strip(), since
+    msg = (ready.get("message") or ready.get("reason") or "").splitlines()
+    msg = msg[0] if msg else ""
+    if ready.get("status") == "Unknown":
+        return "warn", f"reconciling: {msg}".rstrip(": "), since
+    return "fail", f"not ready: {msg}".rstrip(": "), since
+
+
+def flux_checks(doc):
+    out = []
+    ks = sorted(items(doc, "Kustomization"), key=meta_of)
+    hr = sorted(items(doc, "HelmRelease"), key=meta_of)
+    for k in ks:
+        ns, name = meta_of(k)
+        label = name if ns == "flux-system" else f"{ns}/{name}"
+        out.append(check(f"flux ks {label}", *flux_state(k)))
+    for h in hr:
+        ns, name = meta_of(h)
+        out.append(check(f"flux hr {ns}/{name}", *flux_state(h)))
+    if not ks:
+        out.append(check("flux ks", "fail", "no Kustomizations"))
+    return out
+
+
+def ceph_checks(doc):
+    health = doc.get("health", {}) if isinstance(doc, dict) else {}
+    status = health.get("status", "")
+    state = {"HEALTH_OK": "ok", "HEALTH_WARN": "warn", "HEALTH_ERR": "fail"}.get(status, "unknown")
+    names = sorted(health.get("checks", {}) or {})
+    detail = status or "no health"
+    if names:
+        msgs = []
+        for n in names:
+            m = ((health["checks"][n] or {}).get("summary") or {}).get("message") or ""
+            msgs.append(f"{n}: {m}" if m else n)
+        detail += "; " + "; ".join(msgs)
+    out = [check("ceph health", state, detail)]
+    pg = doc.get("pgmap", {}) if isinstance(doc, dict) else {}
+    used, total = pg.get("bytes_used"), pg.get("bytes_total")
+    if isinstance(used, (int, float)) and isinstance(total, (int, float)) and total > 0:
+        pct = 100.0 * used / total
+        state = "fail" if pct >= CEPH_FAIL_PCT else "warn" if pct >= CEPH_WARN_PCT else "ok"
+        out.append(check("ceph usage", state, f"{pct:.0f}% used, {human_bytes(used)} of {human_bytes(total)}"))
+    else:
+        out.append(check("ceph usage", "unknown", "no usage figures"))
+    return out
+
+
+def backup_rows(doc, ref):
+    """One row per backup CronJob: namespace, name, schedule, last success, newest job state."""
+    jobs = {}
+    for j in items(doc, "Job"):
+        owners = [o.get("name") for o in j.get("metadata", {}).get("ownerReferences", []) or []]
+        ns = meta_of(j)[0]
+        start = parse_time(j.get("status", {}).get("startTime")) or parse_time(
+            j.get("metadata", {}).get("creationTimestamp")
+        )
+        for o in owners:
+            key = (ns, o)
+            if key not in jobs or (start and jobs[key][0] and start > jobs[key][0]):
+                jobs[key] = (start, j)
+    rows = []
+    for cj in sorted(items(doc, "CronJob"), key=meta_of):
+        ns, name = meta_of(cj)
+        st = cj.get("status", {})
+        last_ok = parse_time(st.get("lastSuccessfulTime"))
+        newest = jobs.get((ns, name), (None, None))[1]
+        newest_failed = bool(newest) and (condition(newest, "Failed") or {}).get("status") == "True"
+        rows.append({
+            "namespace": ns,
+            "name": name,
+            "of": name[len("backup-"):] if name.startswith("backup-") else name,
+            "schedule": cj.get("spec", {}).get("schedule", ""),
+            "suspended": bool(cj.get("spec", {}).get("suspend")),
+            "last_success": last_ok,
+            "newest_failed": newest_failed,
+        })
+    return rows
+
+
+def backup_checks(doc, ref):
+    out = []
+    for r in backup_rows(doc, ref):
+        last = r["last_success"]
+        when = f"last success {age(last, ref)}" + (f" ({stamp(last)})" if last else "")
+        secs = (ref - last).total_seconds() if last else None
+        if r["newest_failed"]:
+            state, detail = "fail", f"newest run failed; {when}"
+        elif last is None or secs > BACKUP_FAIL_S:
+            state, detail = "fail", when
+        elif secs > BACKUP_WARN_S:
+            state, detail = "warn", when
+        else:
+            state, detail = "ok", when
+        if r["suspended"]:
+            state = "fail" if state == "fail" else "warn"
+            detail = "suspended; " + detail
+        out.append(check(f"backup {r['namespace']}/{r['name']}", state, detail, last))
+    if not out:
+        out.append(check("backups", "fail", "no backup CronJobs"))
+    return out
+
+
+STATUS_PARTS = [
+    ("proxmox", "proxmox quorum", proxmox_checks),
+    ("nodes", "k8s nodes", node_checks),
+    ("flux", "flux", flux_checks),
+    ("ceph", "ceph", ceph_checks),
+    ("backups", "backups", None),
+]
+
+
+def do_status(args, want_json):
+    if args:
+        raise Usage("status takes no arguments")
+    ref = now()
+    data, errors = fetch_all([p[0] for p in STATUS_PARTS])
+    checks = []
+    for src, label, fn in STATUS_PARTS:
+        if src in errors:
+            checks.append(check(label, "unknown", "source unreachable"))
+            continue
+        checks += backup_checks(data[src], ref) if src == "backups" else fn(data[src])
+    counts = {s: sum(1 for c in checks if c["state"] == s) for s in ("ok", "warn", "fail", "unknown")}
+    state = (
+        "fail" if counts["fail"] else "warn" if counts["warn"] else "unknown" if counts["unknown"] else "ok"
+    )
+    if state == "ok":
+        summary = f"homelab: all {len(checks)} checks ok"
+    else:
+        bad = ", ".join(f"{counts[s]} {s}" for s in ("fail", "warn", "unknown") if counts[s])
+        summary = f"homelab: {bad} of {len(checks)} checks"
+    if want_json:
+        emit_json({"summary": summary, "state": state, "checks": checks})
+    else:
+        print_status(summary, state, checks)
+    for src in errors:
+        warn(f"source unreachable: {errors[src]}")
+    if errors:
+        return EXIT_UNREACHABLE
+    return EXIT_OK if state == "ok" else EXIT_PROBLEM
+
+
+# ---------------------------------------------------------------- list and show
+
+
+def services(doc):
+    deps = sorted(items(doc), key=meta_of)
+    names = [meta_of(d)[1] for d in deps]
+    out = []
+    for d in deps:
+        ns, name = meta_of(d)
+        key = name if names.count(name) == 1 else f"{ns}/{name}"
+        out.append((key, d))
+    return sorted(out, key=lambda x: x[0])
+
+
+def do_list(args, want_json):
+    if len(args) != 1 or args[0] not in ("services", "nodes", "backups"):
+        raise Usage("list takes one of: services, nodes, backups")
+    what = args[0]
+    ref = now()
+    rows = []
+    if what == "services":
+        doc = require(["workloads"])["workloads"]
+        for key, d in services(doc):
+            st = d.get("status", {})
+            rows.append({
+                "name": key,
+                "namespace": meta_of(d)[0],
+                "ready_replicas": st.get("readyReplicas", 0) or 0,
+                "replicas": d.get("spec", {}).get("replicas", 0) or 0,
+            })
+    elif what == "nodes":
+        data = require(["proxmox", "nodes"])
+        for n in data["proxmox"] if isinstance(data["proxmox"], list) else []:
+            if n.get("type") == "node":
+                rows.append({"name": n.get("name"), "kind": "proxmox",
+                             "state": "online" if n.get("online") == 1 else "offline"})
+        for n in items(data["nodes"]):
+            ready = (condition(n, "Ready") or {}).get("status") == "True"
+            rows.append({"name": meta_of(n)[1], "kind": "kubernetes",
+                         "state": "ready" if ready else "not-ready"})
+    else:
+        doc = require(["backups"])["backups"]
+        for r in backup_rows(doc, ref):
+            rows.append({"name": r["name"], "namespace": r["namespace"], "of": r["of"],
+                         "schedule": r["schedule"], "last_success": iso(r["last_success"])})
+    rows.sort(key=lambda r: r["name"])
+    if want_json:
+        emit_json(rows)
+    else:
+        for r in rows:
+            print(r["name"])
+    return EXIT_OK
+
+
+def do_show(args, want_json):
+    if len(args) != 1 or not args[0]:
+        raise Usage("show takes one service name (see: meta homelab list services)")
+    want = args[0]
+    data = require(["workloads", "routes", "flux", "backups"])
+    ref = now()
+    match = None
+    for key, d in services(data["workloads"]):
+        ns, name = meta_of(d)
+        if want in (key, f"{ns}/{name}") or (want == name and "/" not in key):
+            match = (key, d)
+            break
+    if not match:
+        raise NotFound(f"no service {want!r} (see: meta homelab list services)")
+    key, d = match
+    ns, name = meta_of(d)
+    spec, st = d.get("spec", {}), d.get("status", {})
+    containers = spec.get("template", {}).get("spec", {}).get("containers", []) or []
+    tags = [f"{c.get('name')}={image_tag(c.get('image', ''))}" for c in containers]
+    ks = next((k for k in items(data["flux"], "Kustomization") if meta_of(k)[1] == APPS_KUSTOMIZATION), None)
+    ks_state = "absent"
+    if ks:
+        s, detail, _ = flux_state(ks)
+        ks_state = f"{s}, {detail}"
+    hosts = []
+    for r in items(data["routes"]):
+        if meta_of(r)[0] == ns:
+            svcs = [s.get("name") for rt in r.get("spec", {}).get("routes", []) or []
+                    for s in rt.get("services", []) or []]
+            if meta_of(r)[1] == name or name in svcs:
+                hosts += route_hosts(r)
+    hosts = sorted(set(hosts))
+    backup = next((b for b in backup_rows(data["backups"], ref)
+                   if b["namespace"] == ns and b["of"] == name), None)
+    out = {
+        "name": key,
+        "namespace": ns,
+        "ready_replicas": st.get("readyReplicas", 0) or 0,
+        "replicas": spec.get("replicas", 0) or 0,
+        "images": tags,
+        "kustomization": APPS_KUSTOMIZATION,
+        "kustomization_state": ks_state,
+        "ingress_hosts": hosts,
+        "backup_job": backup["name"] if backup else None,
+        "last_backup": iso(backup["last_success"]) if backup else None,
+    }
+    if want_json:
+        emit_json(out)
+        return EXIT_OK
+    lines = [
+        ("name", key),
+        ("namespace", ns),
+        ("ready", f"{out['ready_replicas']}/{out['replicas']}"),
+        ("image", ", ".join(tags) or "none"),
+        ("kustomization", f"{APPS_KUSTOMIZATION}: {ks_state}"),
+        ("ingress", ", ".join(hosts) or "none"),
+    ]
+    if backup:
+        last = backup["last_success"]
+        lines.append(("backup", f"{backup['name']}, last success {age(last, ref)}"
+                      + (f" ({stamp(last)})" if last else "")))
+    else:
+        lines.append(("backup", "none"))
+    for k, v in lines:
+        print(clip(f"{k}: {v}"))
+    return EXIT_OK
+
+
+# ---------------------------------------------------------------- backlog
+
+
+def do_backlog(args, want_json):
+    if args:
+        raise Usage("backlog takes no arguments")
+    doc = require(["backlog"])["backlog"]
+    repos = (doc or {}).get("data", {}) or {}
+    rows = []
+    for i, _ in enumerate(REPOS):
+        r = repos.get(f"r{i}") or {}
+        repo = r.get("nameWithOwner")
+        if not repo:
+            continue
+        for kind, field in (("issue", "issues"), ("pr", "pullRequests")):
+            for n in (r.get(field) or {}).get("nodes", []) or []:
+                rows.append({"repo": repo, "number": n.get("number"), "kind": kind,
+                             "title": (n.get("title") or "").strip()})
+    rows.sort(key=lambda x: (x["repo"], x["number"] or 0))
+    issues = sum(1 for r in rows if r["kind"] == "issue")
+    prs = len(rows) - issues
+    summary = f"homelab: {issues} open issues, {prs} open PRs across {len(REPOS)} repos"
+    if want_json:
+        emit_json({"summary": summary, "repos": [f"{GH_OWNER}/{r}" for r in REPOS], "items": rows})
+        return EXIT_OK
+    print(summary)
+    rw = max([len(r["repo"]) for r in rows] + [0])
+    nw = max([len(str(r["number"])) for r in rows] + [0]) + 1
+    for r in rows:
+        print(clip(f"{r['repo']:<{rw}}  {'#' + str(r['number']):<{nw}}  {r['kind']:<5}  {r['title']}"))
+    return EXIT_OK
+
+
+# ---------------------------------------------------------------- output
+
+
+COLOURS = {"ok": "32", "warn": "33", "fail": "31", "unknown": "90"}
+
+
+def use_colour():
+    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def clip(line):
+    return line if len(line) <= WIDTH else line[: WIDTH - 3] + "..."
+
+
+def paint(state, text):
+    if not use_colour():
+        return text
+    return f"\033[{COLOURS.get(state, '0')}m{text}\033[0m"
+
+
+def print_status(summary, state, checks):
+    nw = max(len(c["name"]) for c in checks)
+    print(paint(state, f"{state:<7}") + summary)
+    for c in checks:
+        line = clip(f"{c['state']:<7}{c['name']:<{nw}}  {c['detail']}")
+        print(paint(c["state"], line[:7]) + line[7:])
+
+
+def emit_json(value):
+    sys.stdout.write(json.dumps(value, separators=(",", ":"), sort_keys=False) + "\n")
+
+
+def warn(msg):
+    sys.stderr.write(clip(f"{PROG}: {msg}") + "\n")
+
+
+def usage_text():
+    lines = [f"usage: {PROG} <verb> [args] [--json]", "", "verbs:"]
+    for v, spec in MANIFEST["verbs"].items():
+        arg = " ".join(f"<{a}>" for a in spec.get("args", []))
+        lines.append(f"  {(v + ' ' + arg).strip():<16} {spec['summary']}")
+    lines.append("")
+    lines.append(f"{PROG} <verb> --help for more. Read-only.")
+    return "\n".join(lines)
+
+
+VERBS = {"status": do_status, "list": do_list, "show": do_show, "backlog": do_backlog}
+
+
+def main(argv):
+    if argv == ["--meta-manifest"]:
+        emit_json(MANIFEST)
+        return EXIT_OK
+    want_json = os.environ.get("META_JSON") == "1"
+    want_help = False
+    rest = []
+    for a in argv:
+        if a == "--json":
+            want_json = True
+        elif a in ("--help", "-h"):
+            want_help = True
+        elif a.startswith("-") and a != "-":
+            warn(f"unknown option {a}")
+            return EXIT_USAGE
+        else:
+            rest.append(a)
+    if not rest or rest[0] == "help":
+        if want_help or (rest and rest[0] == "help"):
+            print(usage_text())
+            return EXIT_OK
+        warn("no verb given")
+        sys.stderr.write(usage_text() + "\n")
+        return EXIT_USAGE
+    verb, args = rest[0], rest[1:]
+    if verb not in VERBS:
+        warn(f"unknown verb {verb!r}; verbs: {', '.join(VERBS)}")
+        return EXIT_USAGE
+    if want_help:
+        print(HELP[verb])
+        return EXIT_OK
+    try:
+        return VERBS[verb](args, want_json)
+    except Usage as e:
+        warn(str(e))
+        return EXIT_USAGE
+    except NotFound as e:
+        warn(str(e))
+        return EXIT_NOT_FOUND
+    except Unreachable as e:
+        warn(f"source unreachable: {e}")
+        return EXIT_UNREACHABLE
+
+
+if __name__ == "__main__":
+    try:
+        code = main(sys.argv[1:])
+        sys.stdout.flush()
+    except BrokenPipeError:
+        code = EXIT_OK
+    except Exception as e:  # a crash in this module is exit 6, never a traceback
+        warn(f"internal error: {type(e).__name__}: {e}")
+        code = EXIT_BROKEN
+    sys.exit(code)

@@ -1,0 +1,140 @@
+{
+ "items": [
+  {
+   "kind": "Node",
+   "metadata": {
+    "name": "talos-01"
+   },
+   "spec": {},
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-10-19T15:26:20Z",
+      "reason": "CiliumIsUp",
+      "status": "False",
+      "type": "NetworkUnavailable"
+     },
+     {
+      "lastTransitionTime": "2026-10-19T17:15:45Z",
+      "reason": "KubeletHasSufficientMemory",
+      "status": "False",
+      "type": "MemoryPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-19T17:15:45Z",
+      "reason": "KubeletHasNoDiskPressure",
+      "status": "False",
+      "type": "DiskPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-19T17:15:45Z",
+      "reason": "KubeletHasSufficientPID",
+      "status": "False",
+      "type": "PIDPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-19T17:15:52Z",
+      "reason": "KubeletReady",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "nodeInfo": {
+     "kubeletVersion": "v1.37.1",
+     "osImage": "Talos (v1.14.4)"
+    }
+   }
+  },
+  {
+   "kind": "Node",
+   "metadata": {
+    "name": "talos-02"
+   },
+   "spec": {},
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-10-19T15:26:22Z",
+      "reason": "CiliumIsUp",
+      "status": "False",
+      "type": "NetworkUnavailable"
+     },
+     {
+      "lastTransitionTime": "2026-10-22T13:06:51Z",
+      "reason": "KubeletHasSufficientMemory",
+      "status": "False",
+      "type": "MemoryPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-22T13:06:51Z",
+      "reason": "KubeletHasNoDiskPressure",
+      "status": "False",
+      "type": "DiskPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-22T13:06:51Z",
+      "reason": "KubeletHasSufficientPID",
+      "status": "False",
+      "type": "PIDPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-22T13:07:01Z",
+      "reason": "KubeletReady",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "nodeInfo": {
+     "kubeletVersion": "v1.37.1",
+     "osImage": "Talos (v1.14.4)"
+    }
+   }
+  },
+  {
+   "kind": "Node",
+   "metadata": {
+    "name": "talos-03"
+   },
+   "spec": {},
+   "status": {
+    "conditions": [
+     {
+      "lastTransitionTime": "2026-10-19T15:26:22Z",
+      "reason": "CiliumIsUp",
+      "status": "False",
+      "type": "NetworkUnavailable"
+     },
+     {
+      "lastTransitionTime": "2026-10-20T13:05:32Z",
+      "reason": "KubeletHasSufficientMemory",
+      "status": "False",
+      "type": "MemoryPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-20T13:05:32Z",
+      "reason": "KubeletHasNoDiskPressure",
+      "status": "False",
+      "type": "DiskPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-20T13:05:32Z",
+      "reason": "KubeletHasSufficientPID",
+      "status": "False",
+      "type": "PIDPressure"
+     },
+     {
+      "lastTransitionTime": "2026-10-20T13:05:41Z",
+      "reason": "KubeletReady",
+      "status": "True",
+      "type": "Ready"
+     }
+    ],
+    "nodeInfo": {
+     "kubeletVersion": "v1.37.1",
+     "osImage": "Talos (v1.14.4)"
+    }
+   }
+  }
+ ],
+ "kind": "List"
+}
