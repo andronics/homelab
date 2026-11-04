@@ -306,7 +306,9 @@ class FakeCore(unittest.TestCase):
         p = self.run_module("backlog")
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assert_conventions(p)
-        self.assertIn("1 open issues, 1 open PRs across 8 repos", p.stdout.splitlines()[0])
+        first = p.stdout.splitlines()[0]
+        self.assertIn("1 open issues, 1 open PRs across 8 repos", first)
+        self.assertFalse(first.startswith("homelab"), first)
         self.assertIn("andronics/homelab-k8s", p.stdout)
         data = self.assert_conventions(self.run_module("backlog", json_flag=True), is_json=True)
         self.assertEqual(len(data["repos"]), 8)

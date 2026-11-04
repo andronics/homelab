@@ -653,7 +653,7 @@ def do_backlog(args, want_json):
     rows.sort(key=lambda x: (x["repo"], x["number"] or 0))
     issues = sum(1 for r in rows if r["kind"] == "issue")
     prs = len(rows) - issues
-    summary = f"homelab: {issues} open issues, {prs} open PRs across {len(REPOS)} repos"
+    summary = f"{issues} open issues, {prs} open PRs across {len(REPOS)} repos"
     if want_json:
         emit_json({"summary": summary, "repos": [f"{GH_OWNER}/{r}" for r in REPOS], "items": rows})
         return EXIT_OK
