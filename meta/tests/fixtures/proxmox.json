@@ -1,0 +1,33 @@
+[
+ {
+  "name": "homelab",
+  "nodes": 3,
+  "quorate": 1,
+  "type": "cluster",
+  "version": 10
+ },
+ {
+  "level": "",
+  "local": 0,
+  "name": "pve-03",
+  "nodeid": 3,
+  "online": 1,
+  "type": "node"
+ },
+ {
+  "level": "",
+  "local": 1,
+  "name": "pve-01",
+  "nodeid": 1,
+  "online": 1,
+  "type": "node"
+ },
+ {
+  "level": "",
+  "local": 0,
+  "name": "pve-02",
+  "nodeid": 2,
+  "online": 1,
+  "type": "node"
+ }
+]

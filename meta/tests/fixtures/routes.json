@@ -1,0 +1,62 @@
+{
+ "items": [
+  {
+   "kind": "IngressRoute",
+   "metadata": {
+    "name": "photos",
+    "namespace": "media"
+   },
+   "spec": {
+    "routes": [
+     {
+      "match": "Host(`photos.example.org`)",
+      "services": [
+       {
+        "name": "photos"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "kind": "IngressRoute",
+   "metadata": {
+    "name": "music",
+    "namespace": "media"
+   },
+   "spec": {
+    "routes": [
+     {
+      "match": "Host(`music.example.org`)",
+      "services": [
+       {
+        "name": "music"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "kind": "IngressRoute",
+   "metadata": {
+    "name": "whoami",
+    "namespace": "web"
+   },
+   "spec": {
+    "routes": [
+     {
+      "match": "Host(`whoami.example.org`)",
+      "services": [
+       {
+        "name": "whoami"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "kind": "List"
+}

@@ -1,0 +1,134 @@
+{
+ "items": [
+  {
+   "kind": "CronJob",
+   "metadata": {
+    "name": "backup-photos",
+    "namespace": "media"
+   },
+   "spec": {
+    "schedule": "0 1 * * *",
+    "suspend": false
+   },
+   "status": {
+    "lastScheduleTime": "2026-11-04T01:00:00Z",
+    "lastSuccessfulTime": "2026-11-04T01:00:08Z"
+   }
+  },
+  {
+   "kind": "CronJob",
+   "metadata": {
+    "name": "backup-music",
+    "namespace": "media"
+   },
+   "spec": {
+    "schedule": "15 1 * * *",
+    "suspend": false
+   },
+   "status": {
+    "lastScheduleTime": "2026-11-04T01:15:00Z",
+    "lastSuccessfulTime": "2026-11-04T01:15:07Z"
+   }
+  },
+  {
+   "kind": "CronJob",
+   "metadata": {
+    "name": "backup-tracker",
+    "namespace": "tools"
+   },
+   "spec": {
+    "schedule": "25 2 * * *",
+    "suspend": false
+   },
+   "status": {
+    "lastScheduleTime": "2026-11-04T02:25:00Z",
+    "lastSuccessfulTime": "2026-11-04T02:25:04Z"
+   }
+  },
+  {
+   "kind": "Job",
+   "metadata": {
+    "name": "backup-photos-29895900",
+    "namespace": "media",
+    "ownerReferences": [
+     {
+      "kind": "CronJob",
+      "name": "backup-photos"
+     }
+    ]
+   },
+   "status": {
+    "completionTime": "2026-11-04T01:00:08Z",
+    "conditions": [
+     {
+      "status": "True",
+      "type": "SuccessCriteriaMet"
+     },
+     {
+      "status": "True",
+      "type": "Complete"
+     }
+    ],
+    "startTime": "2026-11-04T01:00:00Z",
+    "succeeded": 1
+   }
+  },
+  {
+   "kind": "Job",
+   "metadata": {
+    "name": "backup-music-29895915",
+    "namespace": "media",
+    "ownerReferences": [
+     {
+      "kind": "CronJob",
+      "name": "backup-music"
+     }
+    ]
+   },
+   "status": {
+    "completionTime": "2026-11-04T01:15:07Z",
+    "conditions": [
+     {
+      "status": "True",
+      "type": "SuccessCriteriaMet"
+     },
+     {
+      "status": "True",
+      "type": "Complete"
+     }
+    ],
+    "startTime": "2026-11-04T01:15:00Z",
+    "succeeded": 1
+   }
+  },
+  {
+   "kind": "Job",
+   "metadata": {
+    "name": "backup-tracker-29895985",
+    "namespace": "tools",
+    "ownerReferences": [
+     {
+      "kind": "CronJob",
+      "name": "backup-tracker"
+     }
+    ]
+   },
+   "status": {
+    "completionTime": "2026-11-04T02:25:04Z",
+    "conditions": [
+     {
+      "status": "True",
+      "type": "SuccessCriteriaMet"
+     },
+     {
+      "status": "True",
+      "type": "Complete"
+     }
+    ],
+    "startTime": "2026-11-04T02:25:00Z",
+    "succeeded": 1
+   }
+  }
+ ],
+ "kind": "List"
+}

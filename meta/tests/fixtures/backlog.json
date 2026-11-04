@@ -1,0 +1,86 @@
+{
+ "data": {
+  "r0": {
+   "issues": {
+    "nodes": [
+     {
+      "number": 3,
+      "title": "Example issue for the tests"
+     }
+    ]
+   },
+   "nameWithOwner": "andronics/homelab",
+   "pullRequests": {
+    "nodes": []
+   }
+  },
+  "r1": {
+   "issues": {
+    "nodes": []
+   },
+   "nameWithOwner": "andronics/homelab-k8s",
+   "pullRequests": {
+    "nodes": [
+     {
+      "number": 12,
+      "title": "Example pull request for the tests"
+     }
+    ]
+   }
+  },
+  "r2": {
+   "issues": {
+    "nodes": []
+   },
+   "nameWithOwner": "andronics/homelab-etc",
+   "pullRequests": {
+    "nodes": []
+   }
+  },
+  "r3": {
+   "issues": {
+    "nodes": []
+   },
+   "nameWithOwner": "andronics/homelab-talos",
+   "pullRequests": {
+    "nodes": []
+   }
+  },
+  "r4": {
+   "issues": {
+    "nodes": []
+   },
+   "nameWithOwner": "andronics/homelab-portal",
+   "pullRequests": {
+    "nodes": []
+   }
+  },
+  "r5": {
+   "issues": {
+    "nodes": []
+   },
+   "nameWithOwner": "andronics/homelab-docker-compose",
+   "pullRequests": {
+    "nodes": []
+   }
+  },
+  "r6": {
+   "issues": {
+    "nodes": []
+   },
+   "nameWithOwner": "andronics/homelab-docker-images",
+   "pullRequests": {
+    "nodes": []
+   }
+  },
+  "r7": {
+   "issues": {
+    "nodes": []
+   },
+   "nameWithOwner": "andronics/homelab-docker-mods",
+   "pullRequests": {
+    "nodes": []
+   }
+  }
+ }
+}

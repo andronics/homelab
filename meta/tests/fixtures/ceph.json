@@ -1,0 +1,12 @@
+{
+ "health": {
+  "checks": {},
+  "mutes": [],
+  "status": "HEALTH_OK"
+ },
+ "pgmap": {
+  "bytes_avail": 10104383733760,
+  "bytes_total": 12002349023232,
+  "bytes_used": 1897965289472
+ }
+}
