@@ -1,0 +1,14 @@
+#!/bin/sh
+# Mount the cephfs-pve storage before guests start: CT 114's hookscript lives on it, and Proxmox does
+# not mount a storage just to run a hookscript. Gives up after WAIT seconds so boot is never held for good.
+STORE="${STORE:-cephfs-pve}"; M="/mnt/pve/$STORE"; WAIT="${WAIT:-150}"
+end=$(($(date +%s) + WAIT))
+while :; do
+    findmnt -rn -t ceph --mountpoint "$M" >/dev/null 2>&1 && exit 0
+    [ "$(date +%s)" -lt "$end" ] || break
+    timeout 20 pvesm list "$STORE" >/dev/null 2>&1
+    findmnt -rn -t ceph --mountpoint "$M" >/dev/null 2>&1 && exit 0
+    sleep 2
+done
+echo "$STORE is still not mounted after ${WAIT}s" >&2
+exit 1
