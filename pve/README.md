@@ -14,7 +14,8 @@ install -m 755 require-cephfs-shared.sh /mnt/pve/cephfs-pve/snippets/
 pct set 114 --hookscript cephfs-pve:snippets/require-cephfs-shared.sh
 ```
 
-* If `cephfs-pve` is not mounted on a node, Proxmox cannot find the script and the start fails.
+* If `cephfs-pve` is not mounted on a node, Proxmox cannot find the script and the start fails;
+  `cephfs-pve-activate.service` (below) mounts it before guests start.
 * If high availability reports `error` after refused starts: fix the mount, then
   `ha-manager set ct:114 --state disabled`, then `--state started`.
 * Each node also has `chattr +i` on the empty directory underneath `/pool/ceph-shared`.
@@ -23,3 +24,10 @@ pct set 114 --hookscript cephfs-pve:snippets/require-cephfs-shared.sh
 
 On every node as `/etc/systemd/system/cephfs-shared.service.d/retry.conf`, then `systemctl daemon-reload`.
 It retries the CephFS mount until it succeeds.
+
+## `cephfs-pve-activate` and `cephfs-pve-activate.service`
+
+On every node: the script as `/usr/local/sbin/cephfs-pve-activate` (mode 755), the unit in
+`/etc/systemd/system/`, then `systemctl daemon-reload && systemctl enable --now cephfs-pve-activate.service`.
+It mounts `cephfs-pve` before `pve-ha-lrm` and `pve-guests`, and gives up after 150 s so a boot is never held
+for good. Proxmox does not mount a storage just to run a hookscript.

@@ -1,0 +1,14 @@
+[Unit]
+Description=Mount the cephfs-pve storage before guests start
+Wants=network-online.target
+After=network-online.target pve-cluster.service ceph-mon.target frr.service
+Before=pve-guests.service pve-ha-lrm.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/cephfs-pve-activate
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target
